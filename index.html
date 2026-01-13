@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Завтраки VIDI Hotel</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
+    <style>
+        :root {
+            color-scheme: light dark;
+        }
+
+        body {
+            font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+            margin: 0;
+            padding: 16px;
+            background: var(--tg-theme-bg-color, #f5f5f5);
+            color: var(--tg-theme-text-color, #111);
+            transition: opacity .3s ease;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: 24px;
+            text-align: center;
+        }
+
+        .subtitle {
+            text-align: center;
+            opacity: 0.7;
+            margin-bottom: 20px;
+        }
+
+        /* Экраны */
+        .screen {
+            display: none;
+            animation: fadeIn .35s ease;
+        }
+
+        .screen.active {
+            display: block;
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        /* Карусель */
+        .carousel {
+            display: flex;
+            overflow-x: auto;
+            gap: 16px;
+            scroll-snap-type: x mandatory;
+            padding-bottom: 10px;
+        }
+
+        .carousel::-webkit-scrollbar {
+            display: none;
+        }
+
+        /* Карточка */
+        .card {
+            min-width: 280px;
+            max-width: 280px;
+            background: var(--tg-theme-secondary-bg-color, #fff);
+            border-radius: 18px;
+            scroll-snap-align: start;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+            overflow: hidden;
+            transition: transform .25s ease, box-shadow .25s ease;
+        }
+
+        .card.selected {
+            transform: scale(1.05);
+            outline: 2px solid #4CAF50;
+            box-shadow: 0 0 0 3px rgba(76,175,80,0.3);
+        }
+
+        .card img {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+        }
+
+        .card-content {
+            padding: 14px;
+        }
+
+        .title-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+        }
+
+        .title {
+            font-size: 18px;
+            font-weight: 600;
+        }
+
+        .tag {
+            font-size: 12px;
+            padding: 3px 8px;
+            border-radius: 999px;
+            background: rgba(0,0,0,0.08);
+        }
+
+        .section {
+            margin-bottom: 6px;
+            font-size: 13px;
+        }
+
+        .section-title {
+            font-weight: 600;
+        }
+
+        .note {
+            margin-top: 10px;
+            font-size: 11px;
+            opacity: 0.7;
+        }
+
+        /* Выбор времени */
+        .time-container {
+            display: flex;
+            flex-direction: column;
+            gap: 16px;
+            margin-top: 20px;
+        }
+
+        input[type="time"] {
+            padding: 14px;
+            font-size: 18px;
+            border-radius: 12px;
+            border: 1px solid rgba(0,0,0,0.15);
+            background: var(--tg-theme-secondary-bg-color, #fff);
+            color: var(--tg-theme-text-color, #111);
+        }
+
+        /* Экран подтверждения */
+        .checkmark {
+            font-size: 64px;
+            text-align: center;
+            margin-top: 40px;
+            animation: popIn .4s ease;
+        }
+
+        @keyframes popIn {
+            from { transform: scale(0.5); opacity: 0; }
+            to { transform: scale(1); opacity: 1; }
+        }
+
+        .confirm-text {
+            text-align: center;
+            margin-top: 20px;
+            font-size: 18px;
+            opacity: 0.9;
+        }
+    </style>
+</head>
+
+<body>
+
+<!-- ЭКРАН 1 — КАРУСЕЛЬ -->
+<div id="screen1" class="screen active">
+    <h1>Завтраки</h1>
+    <div class="subtitle">Выберите один из вариантов</div>
+
+    <div class="carousel" id="carousel"></div>
+</div>
+
+<!-- ЭКРАН 2 — ВЫБОР ВРЕМЕНИ -->
+<div id="screen2" class="screen">
+    <h1>Время подачи</h1>
+    <div class="subtitle">Подача завтраков с 07:00 до 11:00</div>
+
+    <div class="time-container">
+        <label>Выберите время:</label>
+        <input type="time" id="timeInput" min="07:00" max="11:00" value="08:00">
+    </div>
+</div>
+
+<!-- ЭКРАН 3 — ПОДТВЕРЖДЕНИЕ -->
+<div id="screen3" class="screen">
+    <div class="checkmark">✔</div>
+    <div class="confirm-text">Ваш заказ принят! Спасибо.</div>
+</div>
+
+<script>
+    const tg = Telegram.WebApp;
+    tg.expand();
+
+    const screens = {
+        s1: document.getElementById("screen1"),
+        s2: document.getElementById("screen2"),
+        s3: document.getElementById("screen3")
+    };
+
+    const breakfasts = [
+        {
+            id: 1,
+            name: "Завтрак 1",
+            tag: "Яйца + сырники",
+            img: "BREAKFAST1.jpg"
+        },
+        {
+            id: 2,
+            name: "Завтрак 2",
+            tag: "Сосиски + блины",
+            img: "BREAKFAST2.jpg"
+        },
+        {
+            id: 3,
+            name: "Завтрак 3",
+            tag: "Каша + круассан",
+            img: "BREAKFAST3.jpg"
+        }
+    ];
+
+    let selectedBreakfast = null;
+    let selectedTime = null;
+
+    const carousel = document.getElementById("carousel");
+
+    function renderCarousel() {
+        carousel.innerHTML = "";
+
+        breakfasts.forEach(item => {
+            const card = document.createElement("div");
+            card.className = "card" + (selectedBreakfast === item.id ? " selected" : "");
+
+            card.innerHTML = `
+                <img src="${item.img}">
+                <div class="card-content">
+                    <div class="title-row">
+                        <div class="title">${item.name}</div>
+                        <div class="tag">${item.tag}</div>
+                    </div>
+                </div>
+            `;
+
+            card.onclick = () => {
+                selectedBreakfast = item.id;
+                tg.MainButton.setText("Продолжить");
+                tg.MainButton.show();
+                renderCarousel();
+            };
+
+            carousel.appendChild(card);
+        });
+    }
+
+    renderCarousel();
+
+    tg.MainButton.onClick(() => {
+        if (screens.s1.classList.contains("active")) {
+            screens.s1.classList.remove("active");
+            screens.s2.classList.add("active");
+            tg.MainButton.setText("Подтвердить заказ");
+            return;
+        }
+
+        if (screens.s2.classList.contains("active")) {
+            selectedTime = document.getElementById("timeInput").value;
+
+            tg.sendData(JSON.stringify({
+                breakfast: selectedBreakfast,
+                time: selectedTime
+            }));
+
+            screens.s2.classList.remove("active");
+            screens.s3.classList.add("active");
+
+            tg.MainButton.setText("Вернуться в меню");
+            return;
+        }
+
+        if (screens.s3.classList.contains("active")) {
+            screens.s3.classList.remove("active");
+            screens.s1.classList.add("active");
+            selectedBreakfast = null;
+            tg.MainButton.hide();
+            renderCarousel();
+        }
+    });
+</script>
+
+</body>
+</html>
